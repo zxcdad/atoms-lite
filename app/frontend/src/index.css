@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 15% 5%;
+    --foreground: 240 12% 94%;
+    --card: 240 12% 8%;
+    --card-foreground: 240 12% 94%;
+    --popover: 240 12% 9%;
+    --popover-foreground: 240 12% 94%;
+    --primary: 258 90% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 12% 12%;
+    --secondary-foreground: 240 12% 94%;
+    --muted: 240 12% 12%;
+    --muted-foreground: 240 8% 64%;
+    --accent: 240 12% 14%;
+    --accent-foreground: 240 12% 94%;
+    --destructive: 0 91% 71%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 12% 16%;
+    --input: 240 12% 16%;
+    --ring: 258 90% 66%;
+    --radius: 0.5rem;
+    --sidebar-background: 240 12% 8%;
+    --sidebar-foreground: 240 12% 94%;
+    --sidebar-primary: 258 90% 66%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 12% 14%;
+    --sidebar-accent-foreground: 240 12% 94%;
+    --sidebar-border: 240 12% 16%;
+    --sidebar-ring: 258 90% 66%;
+  }
+  * { @apply border-border; }
+  html, body, #root { height: 100%; overflow: clip; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+  .font-mono, code, pre { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+}
+
+.thin-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.thin-scroll::-webkit-scrollbar-thumb { background: #24242e; border-radius: 8px; }
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+.press { transition: all 150ms ease-out; }
+.press:active:not(:disabled) { transform: scale(0.96); }
+
+@keyframes caret { 50% { opacity: 0; } }
+.caret::after { content: '▍'; color: #8b5cf6; margin-left: 2px; animation: caret 1s steps(1) infinite; }
+
+@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+.skeleton {
+  background: linear-gradient(90deg, #17171e 0px, #22222c 160px, #17171e 320px);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}

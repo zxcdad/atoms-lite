@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>专注番茄钟</title>
+<style>
+:root{--primary:#f25f4c;--bg:#fff7f3;--surface:#ffffff;--text:#2b1d1a;--muted:#8a7470;--radius:20px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+button{font-family:inherit}
+body{display:grid;place-items:center;padding:24px}
+.card{background:var(--surface);border-radius:var(--radius);padding:36px 28px;width:100%;max-width:380px;text-align:center;box-shadow:0 20px 60px -20px rgba(0,0,0,.2)}
+h1{font-size:22px;margin-bottom:6px}.sub{color:var(--muted);font-size:14px;margin-bottom:24px}
+.modes{display:flex;gap:6px;justify-content:center;margin-bottom:24px}
+.modes button{border:none;background:transparent;color:var(--muted);padding:8px 14px;border-radius:999px;cursor:pointer;font-size:14px;transition:.2s}
+.modes button.on{background:var(--primary);color:#fff}
+.ring{position:relative;width:220px;height:220px;margin:0 auto 24px}.ring svg{transform:rotate(-90deg)}
+.ring .t{position:absolute;inset:0;display:grid;place-items:center;font-size:48px;font-weight:700;font-variant-numeric:tabular-nums}
+.ctrl{display:flex;gap:12px;justify-content:center}
+.btn{border:none;border-radius:14px;padding:12px 26px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,opacity .15s}
+.btn:hover{opacity:.9}.btn:active{transform:scale(.96)}
+.primary{background:var(--primary);color:#fff}.ghost{background:rgba(127,127,127,.14);color:var(--text)}
+.stats{margin-top:22px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 data-title>专注番茄钟</h1>
+  <p class="sub">保持专注，一次只做一件事</p>
+  <div class="modes"><button class="on" data-m="25">专注 25</button><button data-m="5">短休 5</button><button data-m="15">长休 15</button></div>
+  <div class="ring">
+    <svg width="220" height="220"><circle cx="110" cy="110" r="96" stroke="rgba(127,127,127,.15)" stroke-width="12" fill="none"/><circle id="bar" cx="110" cy="110" r="96" stroke="var(--primary)" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="603" stroke-dashoffset="0" style="transition:stroke-dashoffset .5s"/></svg>
+    <div class="t" id="time">25:00</div>
+  </div>
+  <div class="ctrl"><button class="btn primary" id="toggle">开始</button><button class="btn ghost" id="reset">重置</button></div>
+  <p class="stats">今日已完成 <b id="done">0</b> 个番茄</p>
+</div>
+<script>
+var total=1500,left=1500,timer=null,done=0;
+function $(i){return document.getElementById(i)}
+function render(){var m=Math.floor(left/60),s=left%60;$('time').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');$('bar').style.strokeDashoffset=603*(1-left/total)}
+function stop(){clearInterval(timer);timer=null;$('toggle').textContent='开始'}
+$('toggle').onclick=function(){
+  if(timer){stop();return}
+  $('toggle').textContent='暂停';
+  timer=setInterval(function(){left--;if(left<=0){stop();if(total===1500){done++;$('done').textContent=done}console.log('一个番茄完成！');left=total}render()},1000);
+};
+$('reset').onclick=function(){stop();left=total;render()};
+document.querySelectorAll('[data-m]').forEach(function(b){b.onclick=function(){document.querySelectorAll('[data-m]').forEach(function(x){x.classList.remove('on')});b.classList.add('on');stop();total=left=b.dataset.m*60;render()}});
+function resetApp(){stop();done=0;$('done').textContent='0';left=total;render();console.log('数据已重置')}
+render();console.log('番茄钟已就绪');
+</script>
+</body>
+</html>
