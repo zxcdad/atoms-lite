@@ -226,7 +226,7 @@ export default function Index() {
             )}
           </div>
 
-          <div className="shrink-0 px-3 pb-3">
+          <div className="shrink-0 px-3 pb-[calc(80px+env(safe-area-inset-bottom))] lg:pb-3">
             <div className="thin-scroll mb-2 flex gap-1.5 overflow-x-auto pb-1">
               {PRESETS.map((p) => (
                 <button key={p.key} disabled={generating} onClick={() => setInput(p.prompt)} className="press shrink-0 rounded-full border border-[#24242e] px-2.5 py-1 text-xs text-[#9a9aab] hover:border-[#8b5cf6]/60 hover:text-[#ededf2] disabled:opacity-40">{p.label}</button>
