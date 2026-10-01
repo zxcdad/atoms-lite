@@ -11,6 +11,7 @@ import CasesView from '@/components/CasesView';
 import ManualCopyDialog from '@/components/ManualCopyDialog';
 import QaReportDialog from '@/components/QaReportDialog';
 import { generate, repair } from '@/lib/engine';
+import { routeIntent } from '@/lib/intent';
 import { auditHtml, autoFixHtml, healHtml, type AuditReport, type FixResult } from '@/lib/qa';
 import { clearAll, createProject, downloadFile, isProject, loadSettings, loadStore, saveSettings, saveStore, uid } from '@/lib/storage';
 import { PRESETS } from '@/lib/templates';
@@ -99,10 +100,16 @@ export default function Index() {
     updateProject(pid, (p) => ({ ...p, messages: [...p.messages, userMsg], name: p.versions.length === 0 && p.messages.length === 0 && p.name.startsWith('未命名') ? prompt.slice(0, 16) : p.name }));
     setInput('');
     setPendingPrompt(prompt);
-    setStreamCode('');
     const ctrl = new AbortController();
     abort.current = ctrl;
     try {
+      const route = await routeIntent(prompt, !!current, settings, ctrl.signal);
+      if (route.fallbackReason) toast.error(`意图识别调用失败，已使用规则判断：${route.fallbackReason}`);
+      if (route.intent === 'chat') {
+        updateProject(pid, (p) => ({ ...p, messages: [...p.messages, { id: uid(), role: 'assistant', content: route.reply, source: route.source, createdAt: Date.now() }] }));
+        return;
+      }
+      setStreamCode('');
       const r = await generate({ prompt, currentHtml: current?.html ?? null, history, settings, signal: ctrl.signal, onCode: setStreamCode });
       if (r.fallbackReason) toast.error(`模型调用失败，已降级 Mock：${r.fallbackReason}`);
       updateProject(pid, (p) => {
