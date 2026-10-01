@@ -1,5 +1,6 @@
 import { PRESETS, genericPage } from './templates';
 import type { Settings } from './types';
+import { mockChatReply, ruleIntent } from './intent';
 
 export interface GenResult {
   html: string;
@@ -213,6 +214,89 @@ export async function complete(settings: Settings, prompt: string, signal?: Abor
   if (!res.ok) throw new Error(`接口返回 ${res.status}`);
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? '';
+}
+
+export interface ConverseResult {
+  /** 左侧展示的文字（已去掉 HTML 代码块） */
+  reply: string;
+  /** 模型返回了 html 代码块时才有值；为 null 表示纯对话，画布保持不变 */
+  html: string | null;
+  source: 'mock' | 'llm';
+  fallbackReason?: string;
+}
+
+const chatSystem = (hasPage: boolean) => {
+  const now = new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit' });
+  return `你是 Atoms-Lite 内置的 AI 助手，同时具备网页应用生成能力。当前本地时间：${now}。
+- 用户闲聊、问候或提问（包括问日期、问你是什么模型、问知识类问题等）时，像普通助手一样用自然语言如实、简洁地回答，不要输出任何代码块，也不要强行推销建站功能。
+- 只有当用户明确要求创建网页/应用，或修改当前页面时，先用一两句中文概述本次生成/修改内容，再输出唯一一个 \`\`\`html 代码块，包含完整、可独立运行的单文件 <!DOCTYPE html> 文档（内联 CSS 与 JS，美观、响应式，中文文案）。
+- ${hasPage ? '用户消息中会附带当前页面代码；修改时请在其基础上增量修改并返回完整新文件。' : '当前还没有生成页面。'}`;
+};
+
+/** 去掉回复中的 HTML 代码块，左侧只展示文字 */
+const stripCode = (text: string) => text.replace(/```html[\s\S]*?(```|$)/gi, '').trim();
+
+async function llmConverse(o: GenOptions): Promise<ConverseResult> {
+  const { baseUrl, apiKey, model } = o.settings;
+  const messages = [
+    { role: 'system', content: chatSystem(!!o.currentHtml) },
+    ...o.history.slice(-10),
+    { role: 'user', content: o.currentHtml ? `${o.prompt}\n\n（当前页面代码，仅在需要修改页面时参考）\n\`\`\`html\n${o.currentHtml}\n\`\`\`` : o.prompt },
+  ];
+  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, messages, stream: true, temperature: 0.5 }),
+    signal: o.signal,
+  });
+  if (!res.ok || !res.body) throw new Error(`接口返回 ${res.status}：${(await res.text()).slice(0, 160)}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let text = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() ?? '';
+    for (const line of lines) {
+      const data = line.replace(/^data:\s*/, '').trim();
+      if (!data || data === '[DONE]' || !line.startsWith('data:')) continue;
+      try {
+        text += JSON.parse(data).choices?.[0]?.delta?.content ?? '';
+      } catch {
+        /* 忽略不完整分片 */
+      }
+    }
+    if (/```html/i.test(text)) o.onCode(extractHtml(text));
+  }
+  const fenced = text.match(/```html\s*([\s\S]*?)(```|$)/i);
+  const html = fenced ? fenced[1].trim() : null;
+  if (!text.trim()) throw new Error('模型返回了空内容');
+  const reply = stripCode(text) || (html ? '已根据需求完成生成。' : text.trim());
+  return { reply: html ? `${reply}\n\n（页面代码 ${html.length} 字符已更新到右侧画布，可在「源码」查看）` : reply, html: html || null, source: 'llm' };
+}
+
+/** 本地降级：关键词规则判断，闲聊用预设问候，建站走 Mock 引擎 */
+async function mockConverse(o: GenOptions, fallbackReason?: string): Promise<ConverseResult> {
+  if (ruleIntent(o.prompt, !!o.currentHtml) === 'chat') {
+    await sleep(250, o.signal);
+    return { reply: mockChatReply(o.prompt, !!o.currentHtml), html: null, source: 'mock', fallbackReason };
+  }
+  const r = await mockGenerate(o);
+  return { reply: r.summary, html: r.html, source: 'mock', fallbackReason };
+}
+
+/** 统一对话入口：有 Key 时每条消息都真实请求模型，由回复是否含 html 代码块决定是否更新画布；未配置或请求失败时才降级本地 */
+export async function converse(o: GenOptions): Promise<ConverseResult> {
+  if (!o.settings.apiKey.trim()) return mockConverse(o);
+  try {
+    return await llmConverse(o);
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e;
+    return mockConverse(o, (e as Error).message || '网络错误');
+  }
 }
 
 /** 有 API Key 时调用真实模型，失败或未配置时降级到 Mock 引擎 */

@@ -1,16 +1,7 @@
-import { complete } from './engine';
+/** 仅用于本地降级（未配置 Key 或模型请求失败）：关键词意图判断与预设问候 */
 import { PRESETS } from './templates';
-import type { Settings } from './types';
 
 export type Intent = 'build' | 'chat';
-
-export interface IntentResult {
-  intent: Intent;
-  /** chat 意图时的自然语言回复 */
-  reply: string;
-  source: 'mock' | 'llm';
-  fallbackReason?: string;
-}
 
 const GREETING = /^(你好|您好|嗨|哈喽|哈啰|hi|hello|hey|在吗|在不在|早上好|上午好|下午好|晚上好|早安|晚安)[\s!！。.~～,，呀啊呢哇]*$/i;
 const IDENTITY = /你是谁|你叫什么|你是什么|介绍(一下)?你自己|自我介绍/;
@@ -49,40 +40,3 @@ export function mockChatReply(prompt: string, hasPage: boolean): string {
   return `${INTRO}\n这条消息看起来不是建站指令，所以我没有改动当前页面。\n\n${GUIDE}`;
 }
 
-const ROUTER_PROMPT = (prompt: string, hasPage: boolean) => `你是 Atoms-Lite 网页应用生成助手的意图路由器。判断用户消息的意图：
-- "build"：明确要求生成新页面/应用，或修改当前页面（颜色、样式、增删元素、深色模式等）。
-- "chat"：问候、闲聊、咨询、提问，或没有明确的页面生成/修改指令。
-当前${hasPage ? '已有' : '还没有'}生成的页面。
-如果是 chat，请用中文自然回复：介绍自己是 Atoms-Lite 网页应用生成助手，可以做待办清单、番茄钟、数据看板等，并引导用户说出建站需求（简洁友好，不超过 120 字，不要输出代码）。
-只输出 JSON，不要其他内容：{"intent":"build"|"chat","reply":"chat 时的回复，build 时为空"}
-用户消息：${prompt}`;
-
-function parseRouter(text: string): { intent: Intent; reply: string } | null {
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  try {
-    const j = JSON.parse(m[0]);
-    if (j.intent !== 'build' && j.intent !== 'chat') return null;
-    return { intent: j.intent, reply: typeof j.reply === 'string' ? j.reply.trim() : '' };
-  } catch {
-    return null;
-  }
-}
-
-/** 意图识别：有 Key 时由模型判断并生成聊天回复，失败或未配置时使用关键词规则 + Mock 预设回复 */
-export async function routeIntent(prompt: string, hasPage: boolean, settings: Settings, signal: AbortSignal): Promise<IntentResult> {
-  const rule = (): IntentResult => {
-    const intent = ruleIntent(prompt, hasPage);
-    return { intent, reply: intent === 'chat' ? mockChatReply(prompt, hasPage) : '', source: 'mock' };
-  };
-  if (!settings.apiKey.trim()) return rule();
-  try {
-    const parsed = parseRouter(await complete(settings, ROUTER_PROMPT(prompt, hasPage), signal));
-    if (!parsed) return { ...rule(), fallbackReason: '模型未返回有效的意图 JSON' };
-    if (parsed.intent === 'chat') return { intent: 'chat', reply: parsed.reply || mockChatReply(prompt, hasPage), source: 'llm' };
-    return { intent: 'build', reply: '', source: 'llm' };
-  } catch (e) {
-    if ((e as Error).name === 'AbortError') throw e;
-    return { ...rule(), fallbackReason: (e as Error).message };
-  }
-}

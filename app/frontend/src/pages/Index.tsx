@@ -10,8 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import CasesView from '@/components/CasesView';
 import ManualCopyDialog from '@/components/ManualCopyDialog';
 import QaReportDialog from '@/components/QaReportDialog';
-import { generate, repair } from '@/lib/engine';
-import { routeIntent } from '@/lib/intent';
+import { converse, repair } from '@/lib/engine';
 import { auditHtml, autoFixHtml, healHtml, type AuditReport, type FixResult } from '@/lib/qa';
 import { clearAll, createProject, downloadFile, isProject, loadSettings, loadStore, saveSettings, saveStore, uid } from '@/lib/storage';
 import { PRESETS } from '@/lib/templates';
@@ -103,18 +102,17 @@ export default function Index() {
     const ctrl = new AbortController();
     abort.current = ctrl;
     try {
-      const route = await routeIntent(prompt, !!current, settings, ctrl.signal);
-      if (route.fallbackReason) toast.error(`意图识别调用失败，已使用规则判断：${route.fallbackReason}`);
-      if (route.intent === 'chat') {
-        updateProject(pid, (p) => ({ ...p, messages: [...p.messages, { id: uid(), role: 'assistant', content: route.reply, source: route.source, createdAt: Date.now() }] }));
+      const r = await converse({ prompt, currentHtml: current?.html ?? null, history, settings, signal: ctrl.signal, onCode: setStreamCode });
+      const note = r.fallbackReason ? `⚠️ 模型请求失败（${r.fallbackReason}），已降级为本地 Mock 回复。\n\n` : '';
+      if (r.fallbackReason) toast.error(`模型请求失败，已降级本地 Mock：${r.fallbackReason}`);
+      const html = r.html;
+      if (!html) {
+        updateProject(pid, (p) => ({ ...p, messages: [...p.messages, { id: uid(), role: 'assistant', content: note + r.reply, source: r.source, createdAt: Date.now() }] }));
         return;
       }
-      setStreamCode('');
-      const r = await generate({ prompt, currentHtml: current?.html ?? null, history, settings, signal: ctrl.signal, onCode: setStreamCode });
-      if (r.fallbackReason) toast.error(`模型调用失败，已降级 Mock：${r.fallbackReason}`);
       updateProject(pid, (p) => {
-        const version = { id: uid(), index: p.versions.length + 1, html: r.html, prompt, createdAt: Date.now() };
-        const msg: ChatMessage = { id: uid(), role: 'assistant', content: r.summary, versionId: version.id, source: r.source, createdAt: Date.now() };
+        const version = { id: uid(), index: p.versions.length + 1, html, prompt, createdAt: Date.now() };
+        const msg: ChatMessage = { id: uid(), role: 'assistant', content: note + r.reply, versionId: version.id, source: r.source, createdAt: Date.now() };
         return { ...p, versions: [...p.versions, version], currentVersionId: version.id, messages: [...p.messages, msg] };
       });
       setMobileTab('preview');
